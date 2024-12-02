@@ -99,3 +99,115 @@ SELECT DATE(order_date) AS sales_day,
 FROM orders
 GROUP BY sales_day
 ORDER BY sales_day;
+
+-- 8.1. Ранжирование продуктов по продажам в рамках каждой категории
+SELECT category, 
+       product_name, 
+       SUM(sales_amount) AS total_sales, 
+       RANK() OVER (PARTITION BY category ORDER BY SUM(sales_amount) DESC) AS rank_in_category
+FROM sales
+GROUP BY category, product_name
+ORDER BY category, rank_in_category;
+
+-- 8.2. Скользящее среднее продаж за последние 7 дней
+SELECT sales_date, 
+       SUM(sales_amount) AS daily_sales, 
+       AVG(SUM(sales_amount)) OVER (ORDER BY sales_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS moving_avg_7_days
+FROM sales
+GROUP BY sales_date
+ORDER BY sales_date;
+
+-- 9. Обработка строк и данных
+
+-- 9.1. Извлечение домена из email клиентов
+SELECT customer_id, 
+       customer_email, 
+       SUBSTRING(customer_email FROM POSITION('@' IN customer_email) + 1) AS email_domain
+FROM customers;
+
+-- 9.2. Объединение имени и фамилии клиентов в один столбец
+SELECT customer_id, 
+       CONCAT(first_name, ' ', last_name) AS full_name
+FROM customers;
+
+-- 10. Анализ временных рядов
+
+-- 10.1. Ежедневный прирост продаж
+WITH daily_sales AS (
+    SELECT sales_date, 
+           SUM(sales_amount) AS total_sales
+    FROM sales
+    GROUP BY sales_date
+)
+SELECT sales_date, 
+       total_sales, 
+       total_sales - LAG(total_sales) OVER (ORDER BY sales_date) AS daily_growth
+FROM daily_sales;
+
+-- 10.2. Анализ сезонности: общее количество продаж по месяцам за год
+SELECT EXTRACT(MONTH FROM sales_date) AS sales_month, 
+       SUM(sales_amount) AS total_sales
+FROM sales
+WHERE EXTRACT(YEAR FROM sales_date) = 2024
+GROUP BY sales_month
+ORDER BY sales_month;
+
+-- 11. Использование временных таблиц
+
+-- 11.1. Временная таблица для анализа повторных клиентов
+WITH repeat_customers AS (
+    SELECT customer_id, 
+           COUNT(order_id) AS total_orders
+    FROM orders
+    GROUP BY customer_id
+    HAVING COUNT(order_id) > 1
+)
+SELECT c.customer_id, 
+       c.customer_name, 
+       rc.total_orders
+FROM customers c
+JOIN repeat_customers rc ON c.customer_id = rc.customer_id;
+
+-- 12. Многотабличные запросы и объединения
+
+-- 12.1. Клиенты без заказов (анализ новых пользователей)
+SELECT c.customer_id, 
+       c.customer_name
+FROM customers c
+LEFT JOIN orders o ON c.customer_id = o.customer_id
+WHERE o.customer_id IS NULL;
+
+-- 12.2. Анализ прибыльности заказов с учётом скидок
+SELECT o.order_id, 
+       o.order_date, 
+       oi.product_id, 
+       p.product_name, 
+       oi.quantity, 
+       oi.unit_price, 
+       oi.unit_price * oi.quantity AS total_price, 
+       (oi.unit_price * oi.quantity) * (1 - p.discount_rate) AS discounted_price
+FROM orders o
+JOIN order_items oi ON o.order_id = oi.order_id
+JOIN products p ON oi.product_id = p.product_id;
+
+-- 13. Углубленная аналитика и подзапросы
+
+-- 13.1. Топ-3 клиента по доходу для каждого региона
+SELECT region_name, 
+       customer_id, 
+       customer_name, 
+       SUM(order_total) AS total_revenue
+FROM (
+    SELECT r.region_name, 
+           c.customer_id, 
+           c.customer_name, 
+           o.order_total, 
+           RANK() OVER (PARTITION BY r.region_name ORDER BY o.order_total DESC) AS rank_in_region
+    FROM regions r
+    JOIN warehouses w ON r.region_id = w.region_id
+    JOIN orders o ON w.warehouse_id = o.warehouse_id
+    JOIN customers c ON c.customer_id = o.customer_id
+) ranked_customers
+WHERE rank_in_region <= 3
+GROUP BY region_name, customer_id, customer_name
+ORDER BY region_name, total_revenue DESC;
