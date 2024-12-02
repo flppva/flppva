@@ -1,0 +1,101 @@
+1.1. Получение активных клиентов (покупка за последние 30 дней)
+SELECT customer_id, customer_name, last_purchase_date
+FROM customers
+WHERE last_purchase_date >= CURRENT_DATE - INTERVAL '30 days';
+
+-- 1.2. Товары, которые отсутствуют на складе
+SELECT product_id, product_name
+FROM products
+WHERE stock_quantity = 0;
+
+
+2. Агрегации и группировки
+-- =============================================
+
+2.1. Подсчёт продаж и среднего чека по категориям товаров
+SELECT category, 
+       COUNT(order_id) AS total_orders, 
+       AVG(order_amount) AS average_order_value
+FROM orders
+GROUP BY category
+ORDER BY total_orders DESC;
+
+2.2. Ежемесячный анализ продаж
+SELECT DATE_TRUNC('month', order_date) AS sales_month, 
+       SUM(order_amount) AS total_sales
+FROM orders
+GROUP BY sales_month
+ORDER BY sales_month;
+
+
+3. Использование подзапросов
+
+
+3.1. Список топ-5 продуктов по объёму продаж
+SELECT product_id, 
+       product_name, 
+       SUM(quantity) AS total_quantity
+FROM order_items
+WHERE product_id IN (
+    SELECT product_id
+    FROM products
+    WHERE category = 'Electronics'
+)
+GROUP BY product_id, product_name
+ORDER BY total_quantity DESC
+LIMIT 5;
+
+4. Джоины и связи между таблицами
+4.1. Полная информация о заказах и клиентах
+SELECT o.order_id, 
+       o.order_date, 
+       o.total_amount, 
+       c.customer_name, 
+       c.customer_email
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+WHERE o.order_date BETWEEN '2024-01-01' AND '2024-12-31';
+
+4.2. Продажи по регионам с учетом складов
+SELECT r.region_name, 
+       s.warehouse_name, 
+       SUM(o.total_amount) AS region_sales
+FROM orders o
+JOIN warehouses s ON o.warehouse_id = s.warehouse_id
+JOIN regions r ON s.region_id = r.region_id
+GROUP BY r.region_name, s.warehouse_name
+ORDER BY region_sales DESC;
+
+
+5. Временные таблицы и оптимизация
+
+
+5.1. Временная таблица для расчёта месячных продаж
+WITH monthly_sales AS (
+    SELECT DATE_TRUNC('month', order_date) AS sales_month, 
+           SUM(order_amount) AS total_sales
+    FROM orders
+    GROUP BY sales_month
+)
+SELECT sales_month, 
+       total_sales, 
+       LAG(total_sales) OVER (ORDER BY sales_month) AS previous_month_sales,
+       total_sales - COALESCE(LAG(total_sales) OVER (ORDER BY sales_month), 0) AS sales_difference
+FROM monthly_sales;
+
+5.2. Использование индексов для ускорения запросов
+EXPLAIN ANALYZE
+SELECT * 
+FROM orders
+WHERE order_date > CURRENT_DATE - INTERVAL '1 year';
+
+
+6. Работа с датами и временными рядами
+
+-- 6.1. Анализ ежедневных продаж
+SELECT DATE(order_date) AS sales_day, 
+       COUNT(order_id) AS total_orders, 
+       SUM(order_amount) AS total_revenue
+FROM orders
+GROUP BY sales_day
+ORDER BY sales_day;
